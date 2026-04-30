@@ -1,0 +1,64 @@
+@startuml GoClaw Multi-tenant State Machine
+title GoClaw — Tenant Session State Machine
+
+[*] --> Unauthenticated
+
+state Unauthenticated {
+    [*] --> AwaitingConnect
+    AwaitingConnect --> Connected : WS connect(token) / validate JWT
+    AwaitingConnect --> Rejected : connect(invalid token) / 401
+}
+
+state Connected {
+    [*] --> Idle
+    
+    state Idle {
+        Idle --> Chatting : chat(agentKey, message)
+        Idle --> Browsing : listAgents / getSession / etc.
+    }
+    
+    state Chatting {
+        [*] --> Dispatching
+        Dispatching --> PipelineRunning : scheduler accepts task
+        PipelineRunning --> Streaming : think stage returns first chunk
+        Streaming --> ToolExecution : LLM requests tool call
+        ToolExecution --> Streaming : tool result returned to LLM
+        Streaming --> MemoryFlush : final response received
+        MemoryFlush --> [*] : session updated, events published
+        
+        PipelineRunning --> Aborted : context cancelled / timeout
+        ToolExecution --> Aborted : tool execution failed
+        Aborted --> [*] : error event sent to client
+    }
+    
+    state Browsing {
+        Browsing --> Idle : response sent
+    }
+    
+    Idle --> Disconnected : WS close / timeout
+}
+
+state Disconnected {
+    [*] --> SessionPreserved : session state in DB
+    SessionPreserved --> [*] : reconnect within TTL
+    SessionPreserved --> Expired : TTL exceeded
+    Expired --> [*]
+}
+
+Rejected --> [*]
+
+note right of Chatting
+  Pipeline stages:
+  context → history → prompt
+  → think → act → observe
+  → memory → summarize
+end note
+
+note right of MemoryFlush
+  Triggers async workers:
+  - Episodic consolidation
+  - KG entity extraction
+  - Semantic memory update
+end note
+
+@enduml

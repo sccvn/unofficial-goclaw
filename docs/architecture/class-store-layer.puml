@@ -1,0 +1,96 @@
+@startuml GoClaw Store Layer Class Diagram
+title GoClaw — Store Layer Class Diagram
+
+interface AgentStore {
+    + GetAgent(ctx, id UUID) (*Agent, error)
+    + GetAgentByKey(ctx, tenantID UUID, key string) (*Agent, error)
+    + ListAgents(ctx, filter AgentFilter) ([]*Agent, error)
+    + CreateAgent(ctx, input CreateAgentInput) (*Agent, error)
+    + UpdateAgent(ctx, id UUID, updates map[string]any) (*Agent, error)
+    + DeleteAgent(ctx, id UUID) error
+}
+
+interface SessionStore {
+    + GetSession(ctx, id UUID) (*Session, error)
+    + GetSessionByKey(ctx, key string) (*Session, error)
+    + CreateSession(ctx, input CreateSessionInput) (*Session, error)
+    + ListSessions(ctx, filter SessionFilter) ([]*Session, error)
+    + DeleteSession(ctx, id UUID) error
+}
+
+interface MemoryStore {
+    + SearchMemory(ctx, agentID UUID, query string, limit int) ([]*MemoryItem, error)
+    + StoreMemory(ctx, agentID UUID, content string, embedding []float32) (*MemoryItem, error)
+    + DeleteMemory(ctx, id UUID) error
+}
+
+interface VaultStore {
+    + GetDocument(ctx, id UUID) (*VaultDocument, error)
+    + ListDocuments(ctx, filter VaultFilter) ([]*VaultDocument, error)
+    + SearchDocuments(ctx, tenantID UUID, query string) ([]*VaultDocument, error)
+    + UpsertDocument(ctx, doc *VaultDocument) (*VaultDocument, error)
+}
+
+interface ProviderStore {
+    + GetProvider(ctx, id UUID) (*LLMProvider, error)
+    + ListProviders(ctx, tenantID UUID) ([]*LLMProvider, error)
+    + CreateProvider(ctx, input CreateProviderInput) (*LLMProvider, error)
+    + UpdateProvider(ctx, id UUID, updates map[string]any) (*LLMProvider, error)
+    + DeleteProvider(ctx, id UUID) error
+}
+
+class "pg.AgentStore" as PGAgentStore {
+    - db *sql.DB
+    - dialect Dialect
+}
+
+class "pg.SessionStore" as PGSessionStore {
+    - db *sql.DB
+}
+
+class "sqlitestore.AgentStore" as SQLiteAgentStore {
+    - db *sql.DB
+}
+
+class "sqlitestore.SessionStore" as SQLiteSessionStore {
+    - db *sql.DB
+}
+
+class "base.Dialect" as Dialect <<interface>> {
+    + Placeholder(n int) string
+    + Now() string
+    + ReturningID() string
+}
+
+class "base.PostgresDialect" as PGDialect {
+    + Placeholder(n) string  /' $1, $2... '/
+}
+
+class "base.SQLiteDialect" as SQLiteDialect {
+    + Placeholder(n) string  /' ?, ?, ... '/
+}
+
+AgentStore <|.. PGAgentStore : implements
+AgentStore <|.. SQLiteAgentStore : implements
+SessionStore <|.. PGSessionStore : implements
+SessionStore <|.. SQLiteSessionStore : implements
+
+PGAgentStore --> Dialect : uses
+SQLiteAgentStore --> Dialect : uses
+
+Dialect <|.. PGDialect : implements
+Dialect <|.. SQLiteDialect : implements
+
+note bottom of PGAgentStore
+  Uses pgx/v5 + database/sql
+  $1, $2, $3 placeholders
+  RETURNING for inserts
+end note
+
+note bottom of SQLiteAgentStore
+  Uses modernc.org/sqlite
+  ?, ?, ? placeholders
+  No pgvector support
+end note
+
+@enduml

@@ -2,6 +2,7 @@
 
 High-level map of GoClaw modules and key cross-cutting concerns.
 For system design see `docs/00-architecture-overview.md`; for API contract see `docs/18-http-api.md`.
+For the complete reading guide see `docs/DOCUMENTATION-INDEX.md`. For architectural decisions see `docs/adr/`.
 
 ---
 

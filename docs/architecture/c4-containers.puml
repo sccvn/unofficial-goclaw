@@ -1,0 +1,57 @@
+@startuml GoClaw C4 Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title GoClaw — Container Diagram (C4 Level 2)
+
+Person(user, "End User")
+Person(admin, "Tenant Admin")
+
+System_Boundary(goclaw_system, "GoClaw") {
+
+    Container(web_ui, "Web Dashboard", "React 19 / TypeScript", "Single-page app for managing agents, providers, sessions, vault, and settings.\nServed embedded in backend or via standalone nginx.")
+
+    Container(desktop_app, "Desktop App (Lite)", "Wails v2 / React 19", "Single-binary desktop application.\nEmbeds gateway + SQLite + React frontend.\nmacOS + Windows.")
+
+    Container(gateway, "Gateway", "Go 1.26", "WebSocket RPC server + HTTP REST API.\nHandles auth, routing, rate limiting.\nExposes /v1/chat/completions (OpenAI-compat).")
+
+    Container(agent_pipeline, "Agent Pipeline", "Go 1.26", "8-stage pipeline: context→history→prompt\n→think→act→observe→memory→summarize.\nOrchestrates LLM calls, tool execution,\nmemory writes.")
+
+    Container(channel_manager, "Channel Manager", "Go 1.26", "Adapters for Telegram, Discord, WhatsApp,\nFeishu, Zalo. Receives inbound messages,\nforwards to pipeline, sends responses.")
+
+    Container(memory_system, "Memory System", "Go 1.26 + pgvector", "3-tier memory: Working (L0) → Episodic (L1)\n→ Semantic/KG (L2).\nConsolidation workers run in background.")
+
+    ContainerDb(postgres, "PostgreSQL 18", "PostgreSQL + pgvector", "Primary datastore for all tenant data:\nagents, sessions, messages, memory, vault.\nVector embeddings for similarity search.")
+
+    ContainerDb(sqlite, "SQLite", "modernc.org/sqlite", "Desktop-only datastore.\nSame schema as PostgreSQL (dual-migration).")
+}
+
+System_Ext(llm_providers, "LLM Providers", "Anthropic, OpenAI, DashScope, etc.")
+System_Ext(channels_ext, "Messaging Channels", "Telegram, Discord, WhatsApp, etc.")
+System_Ext(mcp_ext, "MCP Servers", "External tool servers")
+
+Rel(user, web_ui, "Uses", "HTTPS")
+Rel(user, desktop_app, "Uses", "Local")
+Rel(user, gateway, "WebSocket / HTTP", "WS/HTTPS")
+Rel(admin, web_ui, "Manages", "HTTPS")
+
+Rel(web_ui, gateway, "REST API calls", "HTTPS/JSON")
+Rel(desktop_app, gateway, "Embedded calls", "localhost:18790")
+
+Rel(gateway, agent_pipeline, "Dispatches messages to")
+Rel(gateway, channel_manager, "Routes channel events via")
+Rel(gateway, postgres, "Auth, agents, sessions", "pgx/v5")
+Rel(gateway, sqlite, "Auth, agents, sessions", "database/sql")
+
+Rel(agent_pipeline, llm_providers, "LLM inference", "HTTPS+SSE")
+Rel(agent_pipeline, memory_system, "Read/write memory")
+Rel(agent_pipeline, mcp_ext, "Tool execution", "MCP")
+Rel(agent_pipeline, postgres, "Sessions, messages, memory", "pgx/v5")
+
+Rel(channel_manager, channels_ext, "Bidirectional messaging", "HTTPS")
+Rel(channel_manager, agent_pipeline, "Inbound messages to")
+
+Rel(memory_system, postgres, "pgvector embeddings", "pgx/v5")
+
+@enduml

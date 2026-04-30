@@ -1,0 +1,68 @@
+@startuml GoClaw Agent Pipeline Sequence
+title GoClaw — Agent Pipeline: Message Processing Sequence
+
+actor User
+participant "Gateway\n(WS/HTTP)" as GW
+participant "Scheduler" as SCH
+participant "Pipeline\nOrchestrator" as PIPE
+participant "Context Stage" as CTX
+participant "Think Stage\n(LLM)" as THINK
+participant "Act Stage\n(Tools)" as ACT
+participant "Memory Stage" as MEM
+participant "LLM Provider" as LLM
+participant "Tool" as TOOL
+database "PostgreSQL" as DB
+
+User -> GW: chat(agentKey, message, sessionKey)
+GW -> GW: authenticate + scope check
+GW -> SCH: enqueue(task, lane=main)
+SCH -> PIPE: run(RunState)
+
+note over PIPE: Stage 1: Context
+PIPE -> CTX: run(state)
+CTX -> DB: load agent_context_files\n+ user_context_files
+CTX --> PIPE: state.ContextFiles populated
+
+note over PIPE: Stage 2: History
+PIPE -> DB: load messages(sessionKey, L0)
+note right: L1/L2 loaded if context budget allows
+
+note over PIPE: Stage 3: Prompt Assembly
+PIPE -> PIPE: assemble system prompt\n(SOUL.md + IDENTITY.md + context)
+
+note over PIPE: Stage 4: Think
+PIPE -> THINK: run(state)
+THINK -> LLM: stream(messages, tools)
+LLM --> THINK: SSE chunks (content + tool_calls)
+THINK --> PIPE: state.Response + state.ToolCalls
+
+alt No tool calls
+    note over PIPE: Skip Act/Observe — go to Memory
+else Has tool calls
+    note over PIPE: Stage 5: Act
+    PIPE -> ACT: run(state)
+    loop each tool call
+        ACT -> TOOL: execute(params)
+        TOOL --> ACT: result
+    end
+    ACT --> PIPE: state.ToolResults
+
+    note over PIPE: Stage 6: Observe\n(re-enter Think with tool results)
+    PIPE -> THINK: run(state, withToolResults)
+    THINK -> LLM: stream(messages + tool_results)
+    LLM --> THINK: final response
+    THINK --> PIPE: state.Response (final)
+end
+
+note over PIPE: Stage 7: Memory
+PIPE -> MEM: run(state)
+MEM -> DB: write working memory
+MEM -> DB: trigger episodic consolidation event
+
+note over PIPE: Stage 8: Summarize / Finalize
+PIPE -> DB: update session stats
+PIPE -> GW: stream event chunks to client
+
+GW --> User: streaming response + final result
+
+@enduml

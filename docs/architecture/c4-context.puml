@@ -1,0 +1,39 @@
+@startuml GoClaw C4 System Context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title GoClaw — System Context (C4 Level 1)
+
+Person(user, "End User", "Sends messages via channel or direct API")
+Person(admin, "Tenant Admin", "Manages agents, providers, and users via web dashboard")
+Person(devops, "DevOps / Operator", "Deploys and monitors GoClaw instances")
+
+System(goclaw, "GoClaw Gateway", "Multi-tenant AI agent gateway.\nRoutes messages through LLM pipeline,\nmanages agent identity, memory, and channels.")
+
+System_Ext(telegram, "Telegram", "Messaging channel")
+System_Ext(discord, "Discord", "Messaging channel")
+System_Ext(whatsapp, "WhatsApp", "Messaging channel")
+System_Ext(feishu, "Feishu / Lark", "Messaging channel")
+System_Ext(zalo, "Zalo", "Messaging channel")
+System_Ext(anthropic, "Anthropic API", "Claude LLM provider")
+System_Ext(openai, "OpenAI API", "GPT / Codex LLM provider")
+System_Ext(dashscope, "DashScope (Alibaba)", "Qwen LLM provider")
+System_Ext(mcp_server, "MCP Servers", "External tool servers (Model Context Protocol)")
+
+Rel(user, telegram, "Sends messages via")
+Rel(user, goclaw, "Direct API / WebSocket", "HTTP/WS")
+Rel(admin, goclaw, "Manages via web dashboard", "HTTPS")
+Rel(devops, goclaw, "Deploys via Docker Compose / CLI", "SSH/Docker")
+
+Rel(goclaw, telegram, "Receives + sends messages", "HTTPS")
+Rel(goclaw, discord, "Receives + sends messages", "HTTPS")
+Rel(goclaw, whatsapp, "Receives + sends messages", "HTTPS")
+Rel(goclaw, feishu, "Receives + sends messages", "HTTPS")
+Rel(goclaw, zalo, "Receives + sends messages", "HTTPS")
+Rel(goclaw, anthropic, "LLM inference calls", "HTTPS + SSE")
+Rel(goclaw, openai, "LLM inference calls", "HTTPS + SSE")
+Rel(goclaw, dashscope, "LLM inference calls", "HTTPS + SSE")
+Rel(goclaw, mcp_server, "Tool execution", "MCP protocol")
+
+@enduml

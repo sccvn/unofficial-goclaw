@@ -1,0 +1,126 @@
+@startuml GoClaw Core ERD
+title GoClaw — Core Entity Relationship Diagram
+
+entity "tenants" as TENANT {
+    * id : UUID <<PK>>
+    --
+    * name : TEXT
+    * slug : TEXT <<UNIQUE>>
+    created_at : TIMESTAMPTZ
+}
+
+entity "users" as USER {
+    * id : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK→tenants>>
+    * username : TEXT
+    * role : TEXT  /' admin|operator|viewer '/
+    created_at : TIMESTAMPTZ
+}
+
+entity "agents" as AGENT {
+    * id : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK→tenants>>
+    * agent_key : TEXT <<UNIQUE per tenant>>
+    * name : TEXT
+    * agent_type : TEXT  /' open|predefined '/
+    * provider_id : UUID <<FK>>
+    model : TEXT
+    deleted_at : TIMESTAMPTZ
+    metadata : JSONB
+}
+
+entity "sessions" as SESSION {
+    * id : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK→tenants>>
+    * agent_id : UUID <<FK→agents>>
+    * user_id : UUID <<FK→users>>
+    session_key : TEXT
+    created_at : TIMESTAMPTZ
+    last_message_at : TIMESTAMPTZ
+    metadata : JSONB
+}
+
+entity "messages" as MESSAGE {
+    * id : UUID <<PK>>
+    --
+    * session_id : UUID <<FK→sessions>>
+    * role : TEXT  /' user|assistant|tool '/
+    * content : TEXT
+    tool_calls : JSONB
+    tool_results : JSONB
+    created_at : TIMESTAMPTZ
+}
+
+entity "memory_items" as MEMORY {
+    * id : UUID <<PK>>
+    --
+    * agent_id : UUID <<FK→agents>>
+    * tenant_id : UUID <<FK→tenants>>
+    * content : TEXT
+    embedding : vector(1536)  /' pgvector '/
+    created_at : TIMESTAMPTZ
+}
+
+entity "episodic_summaries" as EPISODIC {
+    * id : UUID <<PK>>
+    --
+    * session_id : UUID <<FK→sessions>>
+    * agent_id : UUID <<FK→agents>>
+    * summary : TEXT
+    embedding : vector(1536)
+    promoted : BOOLEAN
+    created_at : TIMESTAMPTZ
+}
+
+entity "llm_providers" as PROVIDER {
+    * id : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK→tenants>>
+    * name : TEXT
+    * provider_type : TEXT
+    api_key_encrypted : BYTEA  /' AES-256-GCM '/
+    base_url : TEXT
+}
+
+entity "cron_jobs" as CRON {
+    * id : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK→tenants>>
+    * agent_id : UUID <<FK→agents>>
+    * schedule : TEXT
+    next_run_at : TIMESTAMPTZ
+    payload : JSONB
+}
+
+entity "vault_documents" as VAULT {
+    * id : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK→tenants>>
+    agent_id : UUID  /' nullable '/
+    * path : TEXT
+    * title : TEXT
+    content : TEXT
+    embedding : vector(1536)
+}
+
+TENANT ||--o{ USER : "has"
+TENANT ||--o{ AGENT : "owns"
+TENANT ||--o{ SESSION : "scopes"
+TENANT ||--o{ PROVIDER : "configures"
+TENANT ||--o{ CRON : "schedules"
+TENANT ||--o{ VAULT : "stores"
+
+AGENT ||--o{ SESSION : "handles"
+AGENT ||--o{ MEMORY : "accumulates"
+AGENT ||--o{ EPISODIC : "summarizes"
+AGENT ||--o{ CRON : "triggered by"
+
+SESSION ||--o{ MESSAGE : "contains"
+SESSION ||--o{ EPISODIC : "consolidated to"
+
+USER ||--o{ SESSION : "initiates"
+
+@enduml
